@@ -1,0 +1,969 @@
+---
+title: "BDST_PressCook_G12"
+author: "Catherine Guazzone, Oguz Baz, Bence Marosi"
+date: "2023-10-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries, file
+```{r, print = FALSE}
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(caret)
+library(forcats)
+library(dplyr)
+library(scales)
+
+setwd("C:/Users/maros/OneDrive/Dokumentumok/University/MSc Behavioural Data Science/Block 1/Behavioural Data Science Toolbox/Assignments/Pressure cooker/")
+
+eelloo_data <- read_xlsx(path = "data-eelloo.xlsx")
+```
+
+# Data cleaning
+#### Variable we will keep: AUTHCUSTOMERID, FIRSTLOGIN, LASTLOGIN, NRofLogins, GENDER, Years of Experience, Educationlevel, Goal, Age, AgeGroup, BRANCHE, QDI_FINISHED, 2460_Significance, 2457_Innovation, 2454_Learning, 2451_Career, 2452_Competition, 2455_Perfection, 2458_Appreciation, 2459_Certainty, 2456_Cooperation, 2450_Autonomy, 2453_Influence, 2449_Esteem, QPI_FINISHED, 64_Extrovert, 68_Innovative, 67_Stable, 66_Conscientious, 65_Agreeable
+```{r}
+selected_variables <- c(
+  "AUTHCUSTOMERID", "USERCREATIONDATE", "FIRSTLOGIN", "LASTLOGIN", "NRofLogins", "GENDER",
+  "Years of Experience", "Educationlevel", "Goal", "Age", "AgeGroup",
+  "BRANCHE", "Occupation", # basic info
+  "QDI_FINISHED", "2460_Significance", "2457_Innovation", "2454_Learning",
+  "2451_Career", "2452_Competition", "2455_Perfection", "2458_Appreciation",
+  "2459_Certainty", "2456_Cooperation", "2450_Autonomy", "2453_Influence",
+  "2449_Esteem", # motivation
+  "QPI_FINISHED", "64_Extrovert", "68_Innovative", "67_Stable",
+  "66_Conscientious", "65_Agreeable"
+) # personality
+# added USERCREATIONDATE, Occupation
+
+# Creating the base (filtered) data frame
+base_df <- eelloo_data[selected_variables]
+head(base_df)
+```
+
+#### Differences in days in logins
+```{r}
+## Differences in days between last and first logins
+base_df$FIRSTLOGIN <- as.Date(base_df$FIRSTLOGIN, format = "%Y-%m-%d")
+base_df$LASTLOGIN <- as.Date(base_df$LASTLOGIN, format = "%Y-%m-%d")
+
+# Calculating the number of day differences and store it in a new column
+base_df$DayDifference <- as.numeric(base_df$LASTLOGIN - base_df$FIRSTLOGIN)
+
+# Deleting FIRSTLOGIN and LASTLOGIN variables
+base_df <- base_df[, !(names(base_df) %in% c("LASTLOGIN", "FIRSTLOGIN"))]
+```
+
+#### Recoding Customerid, Educationlevel, Goal and Branche
+```{r}
+# Recoding AUTHCUSTOMERID from 301-304 to 1, 2, 3, 4
+base_df$AUTHCUSTOMERID <- ifelse(base_df$AUTHCUSTOMERID == 301, 1,
+  ifelse(base_df$AUTHCUSTOMERID == 302, 2,
+    ifelse(base_df$AUTHCUSTOMERID == 303, 3,
+      ifelse(base_df$AUTHCUSTOMERID == 304, 4,
+        base_df$AUTHCUSTOMERID
+      )
+    )
+  )
+)
+
+# Recoding Educationlevel to shorter names
+base_df$Educationlevel <- ifelse(base_df$Educationlevel == "MBO niveau 3 (vakopleiding)", "MBO 3",
+  ifelse(base_df$Educationlevel == "LBO/VBO/VMBO (oude stijl)", "LBO/VBO/VMBO",
+    ifelse(base_df$Educationlevel == "MBO niveau 2  (basisberoepsopleiding)", "MBO 2",
+      ifelse(base_df$Educationlevel == "MBO niveau 4 (middenkader/specialist)", "MBO 4",
+        ifelse(base_df$Educationlevel == "Doctor (Promotieonderzoek)", "Doctor",
+          ifelse(base_df$Educationlevel == "MBO niveau 1 (assistentopleiding)", "MBO 1",
+            ifelse(base_df$Educationlevel == "VSO (Voortgezet Speciaal Onderwijs)", "VSO",
+              ifelse(base_df$Educationlevel == "MLK (Moeilijk Lerende Kinderen)", "MLK",
+                ifelse(base_df$Educationlevel == "VMBO Leer-werktraject", "VMBO LW",
+                  ifelse(base_df$Educationlevel == "VMBO Kaderberoepsgericht", "VMBO KBG",
+                    ifelse(base_df$Educationlevel == "Niet bekend", "NB",
+                      ifelse(base_df$Educationlevel == "VMBO Basisberoepsgericht", "VMBO BS",
+                        ifelse(base_df$Educationlevel == "VMBO Theoretisch", "VMBO TH",
+                          ifelse(base_df$Educationlevel == "VMBO Gemengd", "VMBO GM",
+                            ifelse(base_df$Educationlevel == "Basisonderwijs", "B-OW", base_df$Educationlevel)
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+
+base_df$Goal <- ifelse(base_df$Goal == "Ontwikkeling: je wilt weten wat je sterke en ontwikkelpunten zijn",
+  "Development",
+  ifelse(base_df$Goal == "Outplacement: je bent op zoek naar een baan, buiten het bedrijf", "Outplacement",
+    ifelse(base_df$Goal == "Loopbaanoriëntatie: je wilt weten waar jouw toekomstmogelijkheden liggen",
+      "Career orientation",
+      ifelse(base_df$Goal == "Geen van bovenstaande /anders", "None of the above",
+        ifelse(base_df$Goal == "Toelatingsonderzoek: je wilt een opleiding gaan volgen", "Admission",
+          ifelse(base_df$Goal == "Re-integratie: je wilt weten op welke plaats in (of buiten) het bedrijf je weer aan de slag kunt", "Reintegration",
+            ifelse(base_df$Goal == "Selectie: je hebt gesolliciteerd op een bepaalde functie", "Selection",
+                   base_df$Goal)
+          )
+        )
+      )
+    )
+  )
+)
+
+
+base_df$BRANCHE <- ifelse(base_df$BRANCHE == "Geen van bovenstaande", "None",
+  ifelse(base_df$BRANCHE == "Gezondheidszorg en welzijn", "Health",
+    ifelse(base_df$BRANCHE == "Communicatie/media", "Communication",
+      ifelse(base_df$BRANCHE == "Schoonmaak", "Cleaning",
+        ifelse(base_df$BRANCHE == "Detailhandel", "Retail",
+          ifelse(base_df$BRANCHE == "Transport-Logistiek", "Logistics",
+            ifelse(base_df$BRANCHE == "Zakelijke dienstverlening", "Business",
+              ifelse(base_df$BRANCHE == "Reizen/Vrije tijd/Horeca en catering", "Hospitality",
+                ifelse(base_df$BRANCHE == "Gezondheidszorg en welzijn", "Government",
+                  ifelse(base_df$BRANCHE == "Chemie & Farmacie", "Pharma",
+                    ifelse(base_df$BRANCHE == "Automobielindustrie", "Automobiles",
+                      ifelse(base_df$BRANCHE == "Groothandel", "Wholesale",
+                        ifelse(base_df$BRANCHE == "Niet van toepassing", "Not applicable",
+                          ifelse(base_df$BRANCHE == "Financiële dienstverlening, banken en verzekeringen", "Fincances",
+                            ifelse(base_df$BRANCHE == "Onderwijs", "Education",
+                              ifelse(base_df$BRANCHE == "Bouwnijverheid", "Constructions",
+                                ifelse(base_df$BRANCHE == "Vastgoed of verhuur en leasing", "Real estate",
+                                  ifelse(base_df$BRANCHE == "Voeding, drank en genotmiddelen", "Food",
+                                    ifelse(base_df$BRANCHE == "Industrie/Productie (metaal/niet-metaal/textiel)",
+                                      "Manufact.",
+                                      ifelse(base_df$BRANCHE == "Energie/nutsbedrijven", "Energy",
+                                        ifelse(base_df$BRANCHE == "Landbouw, bosbouw en visserij", "Agric, forestry,
+                                               fish.",
+                                          ifelse(base_df$BRANCHE == "NGO/openbare diensten", "Public serv.",
+                                                 base_df$BRANCHE)
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+```
+
+#### Calculating percentages of missing data per coloumn
+```{r}
+# Calculate the percentage of missing values for each column
+missing_percentage <- colMeans(is.na(base_df)) * 100
+
+# Create a data frame to store the results
+missing_percentage_df <- data.frame(
+  Column = names(missing_percentage),
+  PercentMissing = missing_percentage
+)
+
+print(missing_percentage_df)
+
+# We can see that there is quite a lot of missing data. This is an issue because it could be
+
+# User
+to_remove_user <- c(
+  "QDI_FINISHED",
+  "2460_Significance",
+  "2457_Innovation",
+  "2454_Learning",
+  "2451_Career",
+  "2452_Competition",
+  "2455_Perfection",
+  "2458_Appreciation",
+  "2459_Certainty",
+  "2456_Cooperation",
+  "2450_Autonomy",
+  "2453_Influence",
+  "2449_Esteem",
+  "QPI_FINISHED",
+  "64_Extrovert",
+  "68_Innovative",
+  "67_Stable",
+  "66_Conscientious",
+  "65_Agreeable",
+  "DayDifference"
+)
+
+filtered_user <- subset(missing_percentage_df, !(Column %in% to_remove_user))
+
+
+# Motivation
+to_remove_motivation <- c(
+  "AUTHCUSTOMERID",
+  "USERCREATIONDATE",
+  "FIRSTLOGIN",
+  "LASTLOGIN",
+  "NRofLogins",
+  "GENDER",
+  "Years of Experience",
+  "Educationlevel",
+  "Goal",
+  "Occupation",
+  "Age",
+  "AgeGroup",
+  "BRANCHE",
+  "QPI_FINISHED",
+  "64_Extrovert",
+  "68_Innovative",
+  "67_Stable",
+  "66_Conscientious",
+  "65_Agreeable",
+  "QDI_FINISHED",
+  "DayDifference"
+)
+
+filtered_motivation <- subset(missing_percentage_df, !(Column %in% to_remove_motivation))
+
+# Personality
+to_remove_personality <- c(
+  "AUTHCUSTOMERID",
+  "USERCREATIONDATE",
+  "FIRSTLOGIN",
+  "LASTLOGIN",
+  "NRofLogins",
+  "GENDER",
+  "Years of Experience",
+  "Educationlevel",
+  "Goal",
+  "Occupation",
+  "Age",
+  "AgeGroup",
+  "BRANCHE",
+  "QDI_FINISHED",
+  "2460_Significance",
+  "2457_Innovation",
+  "2454_Learning",
+  "2451_Career",
+  "2452_Competition",
+  "2455_Perfection",
+  "2458_Appreciation",
+  "2459_Certainty",
+  "2456_Cooperation",
+  "2450_Autonomy",
+  "2453_Influence",
+  "2449_Esteem",
+  "DayDifference",
+  "QPI_FINISHED"
+)
+
+filtered_personality <- subset(missing_percentage_df, !(Column %in% to_remove_personality))
+
+ggplot(filtered_user, aes(fill = Column, x = Column, y = PercentMissing)) +
+  geom_col()
+
+ggplot(filtered_motivation, aes(fill = Column, x = Column, y = PercentMissing)) +
+  geom_col()
+
+ggplot(filtered_personality, aes(fill = Column, x = Column, y = PercentMissing)) +
+  geom_col()
+
+
+mean(filtered_user$PercentMissing)
+```
+
+#### Creating Activity variable in base_df
+```{r}
+# because it is a skewed data = 3
+median(base_df$NRofLogins)
+
+# to decide on a cutoff point for very active users = 5.5
+sd(base_df$NRofLogins)
+
+# cutoff for outliers
+median(base_df$NRofLogins) + 2 * sd(base_df$NRofLogins) # 14
+
+# Actually all the very active users are outliers but we include them as very active.
+
+# Create a new variable 'activity' with three categories
+base_df$activity <- cut(base_df$NRofLogins,
+  breaks = c(-Inf, 3, 14, Inf),
+  labels = c("inactive", "active", "very active"),
+  right = FALSE
+)
+
+head(base_df[, 25:30])
+
+# Create a histogram of the number of logins
+histogram <- ggplot(base_df, aes(x = NRofLogins)) +
+  geom_histogram(binwidth = 1, fill = "#FFC0CB", color = "black") +
+  geom_vline(xintercept = median(base_df$NRofLogins), color = "#2E8B57",
+             size = 1) +
+  geom_vline(xintercept = 14, color = "#9370DB", size = 1) +
+  geom_text(aes(x = median(base_df$NRofLogins), y = 100,
+                label = paste("Median =", median(base_df$NRofLogins))),
+            vjust = -30.5, hjust = -0.1, color = "#2E8B57", size = 3) +
+  geom_text(aes(x = 15, y = 5, label = "Cutoff for Very Active Users"),
+            color = "#9370DB", size = 3, vjust = -15.5, hjust = 0) +
+  labs(x = "Number of Logins", y = "Frequency") +
+  labs(title = "Distribution of Number of Logins") +
+  theme_minimal() +
+  coord_cartesian(xlim = c(0, 30)) # Set the x-axis limit to 0 to 100
+
+# Display the histogram
+histogram
+```
+
+#### Cleaning AGE
+```{r}
+# Deleting people who are younger than 18 (interested in adult working people)
+base_df <- base_df[base_df$Age >= 18, ]
+head(base_df$Age)
+
+# Deleting people with NA's in Age
+base_df <- base_df[!is.na(base_df$Age), ]
+
+# View the updated data frame with the 'Age' column
+head(base_df$Age)
+any(is.na(base_df$Age)) # False --> there are no NA left
+```
+
+#### Cleaning GENDER
+```{r}
+# Deleting NA's in gender
+base_df <- base_df[!is.na(base_df$GENDER), ]
+
+# View the updated data frame with the GENDER column
+head(base_df$GENDER)
+any(is.na(base_df$GENDER)) # False --> there are no NA left
+```
+
+#### Cleaning Years of Experience
+```{r}
+# 95% of data  is missing therefore i delete this column
+base_df$`Years of Experience` <- NULL
+```
+
+# Base Visualizations & Descriptives
+#### Eduactionlevel and Activity
+```{r fig.height = 6.5, fig.width = 15, fig.align = "center"}
+# No data deletion
+
+base_df_2 <- base_df
+
+education_levels <- c(
+  "MLK",
+  "VSO",
+  "B-OW",
+  "MBO 1",
+  "LBO/VBO/VMBO",
+  "VMBO BS",
+  "VMBO GM",
+  "VMBO KBG",
+  "VMBO LW",
+  "VMBO TH",
+  "MAVO",
+  "HAVO",
+  "VWO",
+  "MBO 2",
+  "MBO 3",
+  "MBO 4",
+  "HBO",
+  "HBO - Bachelor",
+  "HBO - Master",
+  "WO",
+  "WO - Master",
+  "Doctor",
+  "NB"
+)
+
+
+base_df_2$Educationlevel <- factor(base_df_2$Educationlevel, levels = education_levels)
+
+
+
+very_active_data <- subset(base_df_2, activity == "very active" & !is.na(Educationlevel))
+active_data <- subset(base_df_2, activity == "active" & !is.na(Educationlevel))
+inactive_data <- subset(base_df_2, activity == "inactive" & !is.na(Educationlevel))
+
+
+v_act_edu <- ggplot(very_active_data, aes(x = fct_relevel(Educationlevel))) +
+  geom_bar(aes(fill = as.numeric(Educationlevel))) +
+  labs(
+    x = "Education Level",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_linedraw() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_x_discrete(drop = FALSE) +
+  theme(axis.text.y = element_text(size = 10)) +
+  coord_flip(ylim = c(0, 500))
+
+
+act_edu <- ggplot(active_data, aes(x = fct_relevel(Educationlevel))) +
+  geom_bar(aes(fill = as.numeric(Educationlevel))) +
+  labs(
+    x = "Education Level",
+    y = "Number of people"
+  ) +
+  theme_linedraw() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_x_discrete(drop = FALSE) +
+  theme(axis.text.y = element_text(size = 10)) +
+  coord_flip(ylim = c(0, 500))
+
+inact_edu <- ggplot(inactive_data, aes(x = fct_relevel(Educationlevel))) +
+  geom_bar(aes(fill = as.numeric(Educationlevel))) +
+  labs(
+    x = "Education Level",
+    y = "Number of people"
+  ) +
+  theme_linedraw() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_x_discrete(drop = FALSE) +
+  theme(axis.text.y = element_text(size = 10)) +
+  coord_flip(ylim = c(0, 500))
+
+combined_plot_education <- plot_grid(act_edu, inact_edu, labels = c("A", "B"), ncol = 2, align = "v") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Education Levels of Active (A) and Inactive Users (B)", title.fontface = "bold")
+
+print(combined_plot_education)
+```
+
+#### GOAL and Activity
+```{r fig.height = 10, fig.width = 10, fig.align = "center"}
+colors <- colorRampPalette(c("#739373", "#ead748"))(length(unique(very_active_data$Goal)))
+
+v_act_goal <- ggplot(very_active_data, aes(
+  x = fct_rev(fct_infreq(Goal)),
+  fill = Goal
+)) +
+  geom_bar() +
+  labs(
+    x = "Goal type",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = colors) +
+  theme(axis.text.y = element_text(size = 11))
+
+
+act_goal <- ggplot(
+  active_data,
+  aes(x = fct_rev(fct_infreq(Goal)), fill = Goal)
+) +
+  geom_bar() +
+  labs(
+    x = "Goal type",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = colors) +
+  theme(axis.text.y = element_text(size = 11))
+
+
+inact_goal <- ggplot(inactive_data, aes(
+  x = fct_rev(fct_infreq(Goal)),
+  fill = Goal
+)) +
+  geom_bar() +
+  labs(
+    x = "Goal type",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = colors) +
+  theme(axis.text.y = element_text(size = 11))
+
+
+# Combine the plots using cowplot's plot_grid
+combined_plot_goal <- plot_grid(act_goal, inact_goal,
+  labels = c("A", "B"), nrow = 2
+) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Goal types of Active (A) and Inactive Users (B)", title.fontface = "bold")
+
+# Print the combined plot
+print(combined_plot_goal)
+```
+
+#### BRANCHE and Activity
+```{r fig.height = 10, fig.width = 15, fig.align = "center"}
+colors_2 <- colorRampPalette(c("#d0e4c9", "#506e70"))(28)
+
+v_act_branche <- ggplot(very_active_data, aes(
+  x = fct_rev(fct_infreq(BRANCHE)),
+  fill = BRANCHE
+)) +
+  geom_bar() +
+  labs(
+    x = "Branch of work",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  theme(axis.text.y = element_text(size = 10)) +
+  scale_fill_manual(values = colors_2) +
+  scale_x_discrete(drop = FALSE)
+
+act_branche <- ggplot(active_data, aes(
+  x = fct_rev(fct_infreq(BRANCHE)),
+  fill = BRANCHE
+)) +
+  geom_bar() +
+  labs(
+    x = "Branch of work",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  theme(axis.text.y = element_text(size = 10)) +
+  scale_fill_manual(values = colors_2) +
+  scale_x_discrete(drop = FALSE)
+
+inact_branche <- ggplot(inactive_data, aes(
+  x = fct_rev(fct_infreq(BRANCHE)),
+  fill = BRANCHE
+)) +
+  geom_bar() +
+  labs(
+    x = "Branch of work",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  theme(axis.text.y = element_text(size = 10)) +
+  scale_fill_manual(values = colors_2) +
+  scale_x_discrete(drop = FALSE)
+
+
+# Combine the plots using cowplot's plot_grid
+combined_plot_branch <- plot_grid(act_branche, inact_branche,
+  labels = c("A", "B"), ncol = 2
+) +
+  draw_label(
+    "Work Branch of Active (A) and Inactive People (B)",
+    fontface = "bold",
+    x = 0.5, y = 1.02
+  ) +
+  theme(plot.margin = margin(1, 1, 1, 1, "cm"))
+
+# Print the combined plot
+print(combined_plot_branch)
+```
+
+#### Gender and Activity
+```{r fig.height = 8, fig.width = 12, fig.align = "center"}
+total_females <- sum(base_df$GENDER == "female", na.rm = TRUE)
+total_males <- sum(base_df$GENDER == "male", na.rm = TRUE)
+
+active_females <- sum(base_df$activity == "active" & base_df$GENDER == "female", na.rm = TRUE)
+active_males <- sum(base_df$activity == "active" & base_df$GENDER == "male", na.rm = TRUE)
+
+percentage_active_females <- (active_females / total_females) * 100
+percentage_active_males <- (active_males / total_males) * 100
+
+percentage_df <- data.frame(
+  Gender = c("Female", "Male"),
+  Total = c(total_females, total_males),
+  Activity = c("active"),
+  Percentage = c(percentage_active_females, percentage_active_males)
+)
+
+inactive_females <- sum(base_df$activity == "inactive" & base_df$GENDER == "female", na.rm = TRUE)
+inactive_males <- sum(base_df$activity == "inactive" & base_df$GENDER == "male", na.rm = TRUE)
+
+percentage_inactive_females <- (inactive_females / total_females) * 100
+percentage_inactive_males <- (inactive_males / total_males) * 100
+
+inactive_percentage_df <- data.frame(
+  Gender = c("Female", "Male"),
+  Total = c(total_females, total_males),
+  Activity = c("inactive"),
+  Percentage = c(percentage_inactive_females, percentage_inactive_males)
+)
+
+combined_df <- rbind(percentage_df, inactive_percentage_df)
+
+gender_plot <- ggplot(combined_df, aes(x = Gender, y = Percentage, fill = Activity)) +
+  geom_bar(stat = "identity", width = 0.4, position = "fill") +
+  scale_fill_manual(values = c("active" = "#d9ead3ff", "inactive" = "#f4ccccff")) +
+  theme_minimal() +
+  labs(title = "User Activity Based on Gender", y = "Percentage", fill = "Activity") +
+  scale_y_continuous(labels = percent_format(scale = 100))
+
+print(gender_plot)
+```
+
+#### Agegroup and Activity
+```{r fig.height = 12.5, fig.width = 18.75, fig.align = "center"}
+custom_colors <- c(
+  "18-24" = "#edbbd4", "25-34" = "#d097b3", "35-44" = "#b07291",
+  "45-54" = "#741B47", "> 55" = "#8f4268", "65+" = "pink"
+)
+
+v_act_ageg <- ggplot(very_active_data, aes(
+  x = fct_rev(fct_infreq(AgeGroup)),
+  fill = AgeGroup
+)) +
+  geom_bar() +
+  labs(
+    x = "Age Groups",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_get() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = custom_colors)
+
+act_ageg <- ggplot(active_data, aes(
+  x = fct_rev(fct_infreq(AgeGroup)),
+  fill = AgeGroup
+)) +
+  geom_bar() +
+  labs(
+    x = "Age Groups",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_get() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = custom_colors)
+
+inact_ageg <- ggplot(inactive_data, aes(
+  x = fct_rev(fct_infreq(AgeGroup)),
+  fill = AgeGroup
+)) +
+  geom_bar() +
+  labs(
+    x = "Age Groups",
+    y = "Number of people"
+  ) +
+  coord_flip() +
+  theme_get() +
+  theme(
+    axis.text.x = element_text(angle = 1, vjust = 0.5, face = "bold"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = custom_colors)
+
+
+# Combine the plots
+combined_plot_age <- plot_grid(act_ageg, inact_ageg,
+  labels = c("A", "B"), ncol = 2, align = "v"
+) +
+  draw_label("Age Groups of Active (A) and Inactive People (B)",
+    fontface = "bold",
+    x = 0.5, y = 1.04
+  ) +
+  theme(plot.margin = margin(2, 1, 1, 1, "cm"))
+
+print(combined_plot_age)
+```
+
+# Predictive models of Activity
+```{r}
+# Defining 5-fold cross validation (for all models)
+trcntr <- trainControl("cv", number = 5, p = 0.8)
+
+# Only taking completed personality, motivation and personality & motivation scores
+personality_df <- subset(base_df, QPI_FINISHED == TRUE)
+
+motivation_df <- subset(base_df, QDI_FINISHED == TRUE)
+
+pers_mot_df <- subset(base_df, QPI_FINISHED == TRUE & QDI_FINISHED == TRUE)
+```
+
+#### Multinomal Logistic Regression
+```{r}
+set.seed(1)
+
+MLR_Activity_pers <- caret::train(
+  activity ~ `64_Extrovert` + `68_Innovative` +
+    `67_Stable` + `66_Conscientious` +
+    `65_Agreeable`,
+  data = personality_df,
+  method = "multinom",
+  trace = FALSE,
+  trControl = trcntr
+)
+
+MLR_Activity_mot <- caret::train(
+  activity ~ `2460_Significance` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = motivation_df,
+  method = "multinom",
+  trace = FALSE,
+  trControl = trcntr
+)
+
+MLR_Activity_pers_mot <- caret::train(
+  activity ~ `64_Extrovert` +
+    `68_Innovative` + `67_Stable` +
+    `66_Conscientious` + `65_Agreeable` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = pers_mot_df,
+  method = "multinom",
+  trace = FALSE,
+  trControl = trcntr
+)
+
+MLR_Activity_pers
+MLR_Activity_mot
+MLR_Activity_pers_mot
+```
+
+#### k-NN
+```{r}
+set.seed(2)
+
+kNN_Activity_pers <- caret::train(
+  activity ~ `64_Extrovert` + `68_Innovative` +
+    `67_Stable` + `66_Conscientious` +
+    `65_Agreeable`,
+  data = personality_df,
+  preProcess = "scale",
+  method = "knn",
+  trControl = trcntr
+)
+
+kNN_Activity_mot <- caret::train(
+  activity ~ `2460_Significance` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = motivation_df,
+  preProcess = "scale",
+  method = "knn",
+  trControl = trcntr
+)
+
+kNN_Activity_pers_mot <- caret::train(
+  activity ~ `64_Extrovert` +
+    `68_Innovative` + `67_Stable` +
+    `66_Conscientious` + `65_Agreeable` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = pers_mot_df,
+  preProcess = "scale",
+  method = "knn",
+  trControl = trcntr
+)
+
+kNN_Activity_pers
+kNN_Activity_mot
+kNN_Activity_pers_mot
+```
+
+#### Linear Discriminant Analysis
+```{r}
+set.seed(3)
+
+LDA_Activity_pers <- caret::train(
+  activity ~ `64_Extrovert` + `68_Innovative` +
+    `67_Stable` + `66_Conscientious` +
+    `65_Agreeable`,
+  data = personality_df,
+  method = "lda",
+  trControl = trcntr
+)
+
+LDA_Activity_mot <- caret::train(
+  activity ~ `2460_Significance` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = motivation_df,
+  method = "lda",
+  trControl = trcntr
+)
+
+LDA_Activity_pers_mot <- caret::train(
+  activity ~ `64_Extrovert` +
+    `68_Innovative` + `67_Stable` +
+    `66_Conscientious` + `65_Agreeable` +
+    `2457_Innovation` +
+    `2454_Learning` + `2451_Career` +
+    `2452_Competition` + `2455_Perfection` +
+    `2458_Appreciation` + `2459_Certainty` +
+    `2456_Cooperation` + `2450_Autonomy` +
+    `2453_Influence` + `2449_Esteem`,
+  data = pers_mot_df,
+  method = "lda",
+  trControl = trcntr
+)
+
+LDA_Activity_pers
+LDA_Activity_mot
+LDA_Activity_pers_mot
+```
+
+
+#### Model comparisons 
+```{r fig.height = 12.5, fig.width = 18.75, fig.align = "center"}
+  models <- list(
+    MLR_Pers = MLR_Activity_pers,
+    MLR_Mot = MLR_Activity_mot,
+    MLR_PersMot = MLR_Activity_pers_mot,
+    kNN_Pers = kNN_Activity_pers,
+    kNN_Mot = kNN_Activity_mot,
+    kNN_PersMot = kNN_Activity_pers_mot,
+    LDA_Pers = LDA_Activity_pers,
+    LDA_Motn = LDA_Activity_mot,
+    LDA_PersMot = LDA_Activity_pers_mot
+  )
+  
+  # Extracting the cross-validated accuracies from each model
+  Acc <- sapply(models, function(mdl) max(mdl$results$Accuracy))
+  
+  # Creating a barplot with only the best performing model in red
+  color <- 1 + (Acc >= max(Acc))
+  
+  barplot(Acc, horiz = TRUE, las = 1, col = color, xlim = c(0, 1),
+          names.arg = rep(NA, length(models)))
+  
+  bar_midpoints <- barplot(Acc, horiz = TRUE, plot = FALSE)
+  bar_labels <- 1:length(models)
+  
+  axis(2, at = bar_midpoints, labels = bar_labels)
+  
+  custom_ticks <- seq(0.1, 0.9, by = 0.1)
+  
+  axis(1, at = custom_ticks, labels = custom_ticks)
+  
+  best_model_index <- which.max(Acc)
+  
+  abline(v = Acc[best_model_index], col = "red", lty = 2)
+  
+  # Adding a title to the graph
+  title(main = "Comparing Model Accuracies")
+  
+  # Determining the name of the most accurate model and its accuracy percentage
+  name_of_model <- names(models)[best_model_index]
+  accuracy_percentage <- round(Acc[best_model_index] * 100, 2)
+  
+  # Creating a subtitle with the model name and accuracy percentage
+  x <- ("The best model is MLR with motivation predictors with 70.5% accuracy")
+  
+  # Adding the subtitle to the graph
+  mtext(side = 3, text = x, line = 0)
+  
+  # Adding a legend with model names
+  legend("topright", legend = paste(1:length(models), " ", names(models)),
+         title = "Models", cex = 1.3)
+  
+  # Printing accuracy percentages
+  print(Acc * 100)
+```
+
+### Motivation Model with MLR
+
+Key findings are taken from this model in terms of prediction accuracy.
+
+```{r}
+# Variable importance dataframes
+var_importance_MLR_pers <- varImp(MLR_Activity_pers, scale = FALSE)
+var_importance_MLR_mot <- varImp(MLR_Activity_mot, scale = FALSE)
+var_importance_MLR_pers_mot <- varImp(MLR_Activity_pers_mot, scale = FALSE)
+
+
+features_mot_plot <- ggplot(
+  var_importance_MLR_mot,
+  aes(x = reorder(
+    rownames(var_importance_MLR_mot),
+    Overall
+  ), y = Overall)
+) +
+  geom_bar(stat = "identity", fill = "#2E8B57") +
+  labs(
+    x = "Predictor Variables",
+    y = "Importance Scores",
+    title = "Motivation model with MLR" # Add your desired title here
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(features_mot_plot)
+```
