@@ -11,10 +11,10 @@ Behavioural Data Science Toolbox - Data Analytics/Visualisations:
   - BDA_C4_R2_FINAL_V2.ipynb --> Recognizing one of four emotions (anger, disgust, happiness or sadness) from photos of people's faces.
 
 Big Data Analytics - Machine Learning:
-  - BDST_DV_ASS_3_FINAL_Rmd.Rmd --> Psychometric evaluation of 
-  - Tableau dashboard_DV_ASS_3_FINAL_FINAL.twbx --> Tableau dashboard of the resulting data
+  - BDST_DV_ASS_3_FINAL_Rmd.Rmd --> Psychometric evaluation of item functioning (preprocessing).
+  - Tableau dashboard_DV_ASS_3_FINAL_FINAL.twbx --> Tableau dashboard of the results (visualization).
     
-  - BDST_PressureCooker_Code_G12.Rmd -->
+  - BDST_PressureCooker_Code_G12.Rmd --> User behavioural analysis, improving company performance.
 
 Deep Learning:
   - Ongoing project, trying to predict whether someone has Alzheimer's disorder (very mild, mild, moderate categories) or not based on MRI imaging.
